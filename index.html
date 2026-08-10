@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  
+  <title>Real-Time Inventory Management</title>
+  
+  <link rel="stylesheet" href="style.css">
+
+  <style>
+    #login-screen {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100vh;
+      background-color: var(--bg);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    .login-card {
+      background: var(--card-bg);
+      padding: 3rem 2.5rem;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      max-width: 400px; width: 90%;
+    }
+    .login-card h1 { margin-top: 0; font-size: 2.2rem; color: #1F2937; margin-bottom: 0.5rem; }
+    .login-card p { color: var(--text-muted); margin-bottom: 2.5rem; font-size: 1.1rem; }
+    .btn-google {
+      background-color: #FFFFFF; color: #374151;
+      border: 1px solid #D1D5DB; padding: 0.75rem 1.5rem;
+      font-size: 1.1rem; font-weight: 600; border-radius: 8px;
+      cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      gap: 0.75rem; width: 100%; transition: all 0.2s ease;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+    .btn-google:hover { background-color: #F9FAFB; border-color: #9CA3AF; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .btn-google img { width: 24px; height: 24px; }
+    
+    .custom-date-input {
+      position: relative;
+      color: transparent !important; 
+      background: white;
+    }
+    .custom-date-input::before {
+      content: attr(data-date); 
+      position: absolute;
+      left: 0.4rem;
+      color: #1F2937;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      font-family: inherit;
+    }
+    .custom-date-input::-webkit-calendar-picker-indicator {
+      opacity: 1;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- DELETE MODAL -->
+  <div id="delete-modal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>Confirm Deletion</h3>
+      <p id="delete-modal-text">Are you sure?</p>
+      <div class="modal-actions">
+        <button id="cancel-delete-btn" class="btn-cancel">Cancel</button>
+        <button id="confirm-delete-btn" class="btn-confirm-delete">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BULK QUANTITY MODAL (Now includes optional seller fields) -->
+  <div id="qty-modal" class="modal-overlay">
+    <div class="modal-box">
+      <h3 id="qty-modal-title">Update Stock</h3>
+      <p id="qty-modal-text">Enter the quantity below:</p>
+      
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; justify-content: center;">
+        <input type="number" id="qty-modal-input" placeholder="Quantity" min="0.001" step="any" required style="flex: 2; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem;">
+        <select id="qty-modal-unit" style="flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem;"></select>
+      </div>
+
+      <!-- NEW: Optional Seller Fields (Hidden by default) -->
+      <div id="seller-extra-fields" style="display: none; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; text-align: left; background: #F9FAFB; padding: 10px; border-radius: 8px; border: 1px dashed #D1D5DB;">
+        <label style="font-size: 0.8rem; font-weight: bold; color: var(--text-muted); text-align: center;">Optional Sales Details</label>
+        <input type="number" id="qty-modal-price" placeholder="Total Price (Optional)" step="any" style="padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem;">
+        <input type="text" id="qty-modal-customer" placeholder="Customer Name (Optional)" style="padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem;">
+        <input type="text" id="qty-modal-phone" placeholder="Phone Number (Optional)" style="padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem;">
+      </div>
+
+      <div class="modal-actions">
+        <button id="cancel-qty-btn" class="btn-cancel">Cancel</button>
+        <button id="confirm-qty-btn" style="background-color: var(--primary);">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEDICATED LOGIN SCREEN -->
+  <div id="login-screen">
+    <div class="login-card">
+      <h1>📦 Live Inventory</h1>
+      <p>Secure login for Production, Sellers & Visitors</p>
+      <button id="login-btn" class="btn-google">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google Logo">
+        Sign in with Google
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN APP (Hidden until logged in) -->
+  <div class="container" id="main-app" style="display: none;">
+    <header>
+      <h1>📦 Live Inventory</h1>
+      <div id="user-info">
+        <span id="user-role-badge" style="background: #4F46E5; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; margin-right: 10px;"></span>
+        <span id="user-email" style="font-weight: 500; margin-right: 15px;"></span>
+        <button id="logout-btn">Logout</button>
+      </div>
+    </header>
+
+    <div id="app-content">
+      
+      <!-- ADD PRODUCT CARD -->
+      <div class="card" id="add-product-card">
+        <h3 id="form-heading">Add New Product</h3>
+        <form id="add-form" class="form-group" style="flex-wrap: wrap; align-items: center;">
+          <select id="prod-name" required style="min-width: 130px; flex: 1;">
+            <option value="">Select Product</option>
+          </select>
+          <select id="prod-type" required style="min-width: 130px; flex: 1;">
+            <option value="">Select Type</option>
+          </select>
+          <input type="text" id="prod-batch" placeholder="Product Batch" required style="min-width: 130px; flex: 1;">
+          <div style="display: flex; gap: 0.5rem; flex: 1; min-width: 180px;">
+            <input type="number" id="prod-qty" placeholder="Initial Qty" required min="0" step="any" style="flex: 2; width: 100%;">
+            <select id="prod-unit" required style="flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px;"></select>
+          </div>
+          
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-right: 10px;">
+            <input type="checkbox" id="prod-hide" style="width: 16px; height: 16px; cursor: pointer;">
+            <label for="prod-hide" style="font-size: 0.85rem; font-weight: bold; color: #EF4444; cursor: pointer;">Hide from Sellers</label>
+          </div>
+
+          <div style="width: 100%; display: flex; justify-content: flex-end; margin-top: 0.5rem;">
+            <button type="submit" id="add-submit-btn" style="white-space: nowrap;">Add to Inventory</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="stock-header" style="display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; justify-content: space-between;">
+          
+          <h3 style="margin: 0; white-space: nowrap;">Current Stock</h3>
+          
+          <!-- REPORT SECTION -->
+          <div class="report-group" id="report-section" style="display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.75rem; flex: 1; min-width: 340px; padding: 0.5rem 1rem;">
+            
+            <div style="display: flex; align-items: center; gap: 0.25rem;">
+              <label style="font-size: 0.8rem; font-weight: bold;">From:</label>
+              <input type="date" id="report-start" class="custom-date-input" required style="padding: 0.25rem; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border); width: 110px;">
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 0.25rem;">
+              <label style="font-size: 0.8rem; font-weight: bold;">To:</label>
+              <input type="date" id="report-end" class="custom-date-input" required style="padding: 0.25rem; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border); width: 110px;">
+            </div>
+            
+            <button onclick="generateReport()" style="padding: 0.25rem 0.75rem; background-color: #10B981; font-size: 0.85rem; white-space: nowrap; margin-left: 0.5rem;">📄 PDF / Print</button>
+          </div>
+
+          <!-- DOUBLE FILTERS (Product and Type) -->
+          <div style="white-space: nowrap; display: flex; align-items: center; gap: 0.5rem;">
+            <label style="font-size: 0.875rem; color: var(--text-muted); font-weight: bold;">Filter: </label>
+            <select id="name-filter" style="padding: 0.25rem; border-radius: 4px; border: 1px solid var(--border);">
+              <option value="All">All Products</option>
+            </select>
+            <select id="type-filter" onchange="filterInventory()" style="padding: 0.25rem; border-radius: 4px; border: 1px solid var(--border);">
+              <option value="All">All Types</option>
+            </select>
+          </div>
+          
+        </div>
+
+        <div id="inventory-container" class="inventory-list">
+          <!-- Items injected here by JavaScript -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
